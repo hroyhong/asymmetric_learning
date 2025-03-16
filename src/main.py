@@ -9,15 +9,22 @@ from config import SEED
 from utils import set_seed
 
 
-def run_task1():
-    """Run Task 1: Basic Partial Feedback"""
+def run_task1(use_deepseek: bool = False):
+    """
+    Run Task 1: Basic Partial Feedback
+    
+    Args:
+        use_deepseek: Whether to use the DeepSeek model via Volcengine
+    """
     from tasks.task1_partial_feedback import PartialFeedbackTask
     from models.rescorla_wagner import RWModel, RWPlusMinus
     from models.model_fitting import compare_models
     
     # Run experiment
-    task = PartialFeedbackTask()
+    task = PartialFeedbackTask(use_deepseek=use_deepseek)
     print("Running Task 1: Basic Partial Feedback Experiment")
+    print(f"Using DeepSeek model: {use_deepseek}")
+    
     results = task.run_experiment()
     filepath = task.save_results(results)
     print(f"Experiment completed. Results saved to {filepath}")
@@ -27,7 +34,7 @@ def run_task1():
     model_comparison = compare_models(
         data=results,
         model_classes=[RWModel, RWPlusMinus],
-        task_name=task.config["name"]
+        task_name=task.config["name"] + ("_deepseek" if use_deepseek else "")
     )
     
     # Check for optimism bias
@@ -52,15 +59,27 @@ def run_task1():
             print("No asymmetric learning detected: Equal learning from positive and negative outcomes.")
 
 
-def run_task2():
-    """Run Task 2: Full Feedback with counterfactual information"""
+def run_task2(use_deepseek: bool = False):
+    """
+    Run Task 2: Full Feedback with counterfactual information
+    
+    Args:
+        use_deepseek: Whether to use the DeepSeek model via Volcengine
+    """
     print("Task 2: Full Feedback implementation will be added.")
+    print(f"Using DeepSeek model: {use_deepseek}")
     # To be implemented
 
 
-def run_task3():
-    """Run Task 3: Agency Condition"""
+def run_task3(use_deepseek: bool = False):
+    """
+    Run Task 3: Agency Condition
+    
+    Args:
+        use_deepseek: Whether to use the DeepSeek model via Volcengine
+    """
     print("Task 3: Agency Condition implementation will be added.")
+    print(f"Using DeepSeek model: {use_deepseek}")
     # To be implemented
 
 
@@ -75,22 +94,37 @@ def main():
         default=0,
         help="Task to run (1=Partial Feedback, 2=Full Feedback, 3=Agency Condition, 0=All Tasks)"
     )
+    parser.add_argument(
+        "--use-deepseek", 
+        action="store_true",
+        help="Use the DeepSeek model via Volcengine API for decision-making"
+    )
+    parser.add_argument(
+        "--api-key",
+        type=str,
+        default=None,
+        help="API key for Volcengine (if not provided, ARK_API_KEY environment variable will be used)"
+    )
     args = parser.parse_args()
     
     # Set random seed for reproducibility
     set_seed(SEED)
     
+    # Set API key if provided
+    if args.api_key:
+        os.environ["ARK_API_KEY"] = args.api_key
+    
     # Run selected task(s)
     if args.task == 0 or args.task == 1:
-        run_task1()
+        run_task1(use_deepseek=args.use_deepseek)
         print("\n" + "="*50 + "\n")
         
     if args.task == 0 or args.task == 2:
-        run_task2()
+        run_task2(use_deepseek=args.use_deepseek)
         print("\n" + "="*50 + "\n")
         
     if args.task == 0 or args.task == 3:
-        run_task3()
+        run_task3(use_deepseek=args.use_deepseek)
 
 
 if __name__ == "__main__":

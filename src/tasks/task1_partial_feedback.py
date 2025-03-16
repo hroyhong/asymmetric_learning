@@ -13,6 +13,7 @@ import pandas as pd
 from typing import List, Tuple, Dict, Any, Optional, Union
 from tqdm import tqdm
 import sys
+import logging
 
 # Ensure src is in the path so we can import modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -20,18 +21,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import TASK1_CONFIG, SEED
 from utils import set_seed, generate_machine_labels, sample_reward, save_results
 
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class PartialFeedbackTask:
     """
     Implementation of the Basic Partial Feedback task (Task 1).
     """
     
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, use_deepseek: bool = False):
         """
         Initialize the task.
         
         Args:
             config: Configuration parameters
+            use_deepseek: Whether to use the DeepSeek model via Volcengine for decision-making
         """
         self.config = config or TASK1_CONFIG
         set_seed(SEED)
@@ -52,6 +57,21 @@ class PartialFeedbackTask:
         self.casino_machines = {}
         for casino_id in range(1, self.n_casinos + 1):
             self.casino_machines[casino_id] = generate_machine_labels(2)
+            
+        # Set up the model for decision-making
+        self.use_deepseek = use_deepseek
+        if self.use_deepseek:
+            try:
+                from api.deepseek import get_api_client
+                self.deepseek_client = get_api_client()
+                logger.info("Using DeepSeek model for decision-making")
+            except ImportError:
+                logger.warning("Failed to import DeepSeek client. Falling back to random choice.")
+                self.use_deepseek = False
+            except Exception as e:
+                logger.error(f"Error initializing DeepSeek client: {str(e)}")
+                logger.warning("Falling back to random choice.")
+                self.use_deepseek = False
     
     def create_prompt(self, history: List[Tuple[str, float]], visit: int, casino_id: int) -> str:
         """
@@ -86,7 +106,7 @@ A: Machine """
     def get_model_choice(self, prompt: str) -> str:
         """
         Get the model's choice from the prompt.
-        This is a placeholder - in a real implementation, this would call the AI model.
+        This uses the DeepSeek model if enabled, otherwise falls back to random choice.
         
         Args:
             prompt: The prompt to send to the model
@@ -94,8 +114,16 @@ A: Machine """
         Returns:
             The machine choice (e.g., "A", "B", etc.)
         """
-        # Placeholder: randomly choose one of the two machines in the prompt
-        # This would be replaced with actual model inference code
+        if self.use_deepseek:
+            try:
+                # Call the DeepSeek model via Volcengine API
+                return self.deepseek_client.get_slot_machine_choice(prompt)
+            except Exception as e:
+                logger.error(f"Error getting choice from DeepSeek: {str(e)}")
+                logger.warning("Falling back to random choice for this trial.")
+                # Fall back to random choice if API call fails
+        
+        # Random choice fallback
         lines = prompt.strip().split('\n')
         question_line = [line for line in lines if line.startswith('Q:')][0]
         machines = question_line.split('between Machine ')[1].split(' and Machine ')
@@ -114,7 +142,7 @@ A: Machine """
         results = []
         visit_counter = 1
         
-        for casino_id in range(1, self.n_casinos + 1):
+        for casino_id in tqdm(range(1, self.n_casinos + 1), desc="Casinos"):
             # Get the reward probabilities for this casino
             machine1_prob, machine2_prob = self.casino_probabilities[casino_id]
             machine1_label, machine2_label = self.casino_machines[casino_id]
@@ -123,7 +151,7 @@ A: Machine """
             # History of plays for this casino
             history = []
             
-            for visit in range(1, self.n_visits_per_casino + 1):
+            for visit in tqdm(range(1, self.n_visits_per_casino + 1), desc=f"Casino {casino_id} visits", leave=False):
                 # Create prompt based on history
                 prompt = self.create_prompt(history, visit_counter, casino_id)
                 
@@ -147,6 +175,7 @@ A: Machine """
                     'chosen_machine': chosen_machine,
                     'reward': reward,
                     'prompt': prompt,
+                    'model_used': 'deepseek' if self.use_deepseek else 'random',
                 })
                 
                 visit_counter += 1
@@ -164,15 +193,26 @@ A: Machine """
         Returns:
             Path to saved file
         """
-        return save_results(data, self.config["name"], output_dir)
+        task_name = self.config["name"]
+        if self.use_deepseek:
+            task_name += "_deepseek"
+        return save_results(data, task_name, output_dir)
 
 
 def main():
     """
     Run Task 1 experiment.
     """
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run Task 1: Basic Partial Feedback Experiment')
+    parser.add_argument('--use-deepseek', action='store_true', help='Use DeepSeek model via Volcengine API')
+    args = parser.parse_args()
+    
     print("Running Task 1: Basic Partial Feedback Experiment")
-    task = PartialFeedbackTask()
+    print(f"Using DeepSeek model: {args.use_deepseek}")
+    
+    task = PartialFeedbackTask(use_deepseek=args.use_deepseek)
     results = task.run_experiment()
     filepath = task.save_results(results)
     print(f"Experiment completed. Results saved to {filepath}")

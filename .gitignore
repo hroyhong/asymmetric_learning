@@ -41,4 +41,14 @@ ENV/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db 
+Thumbs.db
+
+# Project specific
+results/
+data/
+*.csv
+*.json
+!requirements.json
+*.png
+*.jpg
+*.jpeg 
